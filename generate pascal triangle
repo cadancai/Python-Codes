@@ -1,0 +1,29 @@
+#!/usr/bin/python
+__author__ = 'Lee Cai'
+
+#In this little piece of code, I generate pascal triangle as a nested list
+
+nrows = 100
+
+def pascal_triangle(nrows):
+	pascal_tri = []
+	for i in range(nrows):
+		if i in (0,1):
+			row = [1] * (i+1)
+			pascal_tri.append(row)
+		else:
+			row = [0] * (i+1)
+			for j in range(len(row)):
+				if j == 0:
+					row[j] = pascal_tri[i-1][j]
+				elif j == (len(row)-1):
+					row[j] = pascal_tri[i-1][j-1]
+				else:
+					row[j] = pascal_tri[i-1][j-1] + pascal_tri[i-1][j]
+			pascal_tri.append(row)
+	return pascal_tri
+
+
+pascal_tri = pascal_triangle(20)
+for row in pascal_tri:
+	print row
