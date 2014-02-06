@@ -1,0 +1,119 @@
+#!/usr/bin/python
+__author__ = 'Lee Cai'
+
+#This implementation is based on Dr. Zhexue Huang's paper:
+#CLUSTERING LARGE DATA SETS WITH MIXED NUMERIC AND CATEGORICAL VALUES
+#It's used to handle mixed data in clustering analysis
+
+import random
+import numpy as np
+from collections import Counter
+
+#This is a toy data for testing purpose
+x = np.array([[1, 2, 3], [1, 2, 4], [1,3,4] , [3, 2, 4], [3,3,4], [2,3,3],[2,2,2]]) #all the obs in cluster i, there are three attributes
+
+#attribute that contains string values has to be converted into numeric codes
+#One example of recode these attributes is given below:
+def recode(lst,formats):
+	recode_lst = [0] * len(lst)
+	for i in range(len(lst)):
+		for j in range(len(formats)):
+			if lst[i] == formats[j][0]:
+				recode_lst[i] = formats[j][1]
+				break
+	return recode_lst
+#recode the list results, use 0 for 'abc', 1 for 'b', and 2 for 'c'
+results = ['abc','b','c','b','c','abc']
+formats = [('abc',0),('b',1),('c',2)] #can freely define the code you want to give to the string values
+results_new = recode(results,formats)
+
+
+def Distance(x1,x2):
+	return np.linalg.norm(x1-x2)
+
+def Sigma(x1,x2):
+	return len([i for i, j in zip(x1, x2) if i != j])
+
+def HighestFreq(x,Clustership,cluster,attr):
+	return Counter(x[Clustership == cluster,attr]).most_common(1)[0][0]
+
+#x is a numpy array contains all the data
+#NumberOfClusters is the number of clusters chosen
+#numericAttr is a list contains the column index of numeric attributes
+#catAttr is a list contains the column index of categorical attributes
+#maxIter is the maximum iterations that is allowed
+#gamma is the weight for all the categorical attributes, default to 1
+def k_prototypes(x,NumberOfClusters,numericAttr,catAttr,maxIter=100,gamma=1):
+	prototypes = np.asarray(random.sample(x, NumberOfClusters)) #Choose the initial prototypes
+	print 'prototypes:','\n', prototypes
+	#break out the numeric and categorical parts
+	x_num = x[:,numericAttr]
+	x_cat = x[:,catAttr]
+	O_prototypes = prototypes[:,numericAttr]
+	C_prototypes = prototypes[:,catAttr]
+	NumberOfObjects = x.shape[0]
+	NumberOfNumAttr = len(numericAttr)
+	NumberOfCatAttr = len(catAttr)
+	#initiate the clustership
+	Clustership = np.array([0]*x.shape[0])
+	SumInCluster = np.zeros((NumberOfClusters,NumberOfNumAttr))
+	ClusterCount = np.zeros(NumberOfClusters)
+	#initial allocation
+	for i in range(NumberOfObjects):
+		MinDistance = Distance(x_num[i,:],O_prototypes[0,:])  + gamma*Sigma(x_cat[i,:],C_prototypes[0,:])
+		cluster = 0
+		for j in range(NumberOfClusters):
+			distance = Distance(x_num[i,:],O_prototypes[j,:]) + gamma*Sigma(x_cat[i,:],C_prototypes[j,:])
+			if distance < MinDistance:
+				MinDistance = distance
+				cluster = j
+		Clustership[i] = cluster
+		ClusterCount[cluster] += 1
+		for j in range(NumberOfNumAttr):
+			SumInCluster[cluster,j] += x_num[i,j]
+			O_prototypes[cluster,j] = SumInCluster[cluster,j] / ClusterCount[cluster]
+		for j in range(NumberOfCatAttr):
+			C_prototypes[cluster,j] = HighestFreq(x_cat,Clustership,cluster,j)
+	#reallocation, the process repeats until no more cluster changes of the item or the maximum iteration limit is reached
+	converged = 0
+	for item  in range(maxIter):
+		print item, ':'
+		moves = 0
+		for i in range(NumberOfObjects):
+			MinDistance = Distance(x_num[i,:],O_prototypes[0,:])  + gamma*Sigma(x_cat[i,:],C_prototypes[0,:])
+			cluster = 0
+			for j in range(NumberOfClusters):
+				distance = Distance(x_num[i,:],O_prototypes[j,:]) + gamma*Sigma(x_cat[i,:],C_prototypes[j,:])
+				if distance < MinDistance:
+					MinDistance = distance
+					cluster = j
+			if Clustership[i] != cluster:
+				moves += 1
+				oldCluster = Clustership[i]
+				Clustership[i] = cluster
+				ClusterCount[cluster] += 1
+				ClusterCount[oldCluster] -= 1
+				for j in range(NumberOfNumAttr): #update numeric attributes part in prototypes of old and new clusters
+					SumInCluster[cluster,j] += x_num[i,j]
+					SumInCluster[oldCluster,j] -= x_num[i,j]
+					O_prototypes[cluster,j] = SumInCluster[cluster,j] / ClusterCount[cluster]
+					O_prototypes[oldCluster,j] = SumInCluster[oldCluster,j] / ClusterCount[oldCluster]
+				for j in range(NumberOfCatAttr): #update the categorical attributes part in prototypes of old and new clusters
+					C_prototypes[cluster,j] = HighestFreq(x_cat,Clustership,cluster,j)
+					C_prototypes[oldCluster,j] = HighestFreq(x_cat,Clustership,oldCluster,j)
+		print Clustership
+		if moves == 0:
+			print 'The clustering converged.'
+			converged = 1
+			break
+	return {'x_num': x_num, 'x_cat':x_cat, 'O_prototypes':O_prototypes, 'C_prototypes': C_prototypes, \
+				'NumberOfObjects': NumberOfObjects, 'NumberOfNumAttr': NumberOfNumAttr, \
+				'NumberOfCatAttr': NumberOfCatAttr, 'Clustership': Clustership, \
+				'SumInCluster': SumInCluster, 'ClusterCount': ClusterCount , 'NumberOfClusters': NumberOfClusters}
+
+#example calling of the function.
+k_prototypes(x,3,[0,1],[2],maxIter=10,gamma=1)
+
+
+
+
