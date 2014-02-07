@@ -1,0 +1,130 @@
+#!/usr/bin/python
+__author__ = 'Lee Cai'
+
+#this program is used to parse text files that contains movie reviews
+#these movies are labeled positive or negative
+#The output would be sth like below:
+"""
+class,word,count,probability
+neg,love,476,0.00188239760508
+pos,love,708,0.00256943461551
+neg,crazy,1,3.9546168174e-06
+pos,crazy,41,0.000148794942424
+"""
+#The text files locate in two folders with names pos and neg, which indicate the class of 
+#the reviews. These pos and neg folders reside in the same parent folder.
+
+import argparse
+import re
+import os
+import csv
+import glob
+import string
+
+# Stop word list
+stopWords = ['a', 'able', 'about', 'across', 'after', 'all', 'almost', 'also',
+			 'am', 'among', 'an', 'and', 'any', 'are', 'as', 'at', 'be',
+			 'because', 'been', 'but', 'by', 'can', 'cannot', 'could', 'dear',
+			 'did', 'do', 'does', 'either', 'else', 'ever', 'every', 'for',
+			 'from', 'get', 'got', 'had', 'has', 'have', 'he', 'her', 'hers',
+			 'him', 'his', 'how', 'however', 'i', 'if', 'in', 'into', 'is',
+			 'it', 'its', 'just', 'least', 'let', 'like', 'likely', 'may',
+			 'me', 'might', 'most', 'must', 'my', 'neither', 'no', 'nor',
+			 'not', 'of', 'off', 'often', 'on', 'only', 'or', 'other', 'our',
+			 'own', 'rather', 'said', 'say', 'says', 'she', 'should', 'since',
+			 'so', 'some', 'than', 'that', 'the', 'their', 'them', 'then',
+			 'there', 'these', 'they', 'this', 'tis', 'to', 'too', 'twas', 'us',
+			 've', 'wants', 'was', 'we', 'were', 'what', 'when', 'where', 'which',
+			 'while', 'who', 'whom', 'why', 'will', 'with', 'would', 'yet',
+			 'you', 'your']
+
+def parseArgument():
+    """
+    Code for parsing arguments
+    """
+    parser = argparse.ArgumentParser(description='Parsing a file.')
+    parser.add_argument('-d', nargs=1, required=True)
+    args = vars(parser.parse_args())
+    return args
+
+def getFileList(direc):
+	FILES = []
+	for r,d,f in os.walk(direc):
+		for files in f:
+			if files.endswith(".txt"):
+				fle = os.path.join(r,files)
+				FILES.append(fle)
+	return FILES
+
+def getFileContent(filename):
+	input_file = open(filename,'r')
+	text = input_file.read()
+	input_file.close()
+	return text
+
+def removeStopwords(wordlist, stopwords):
+    return [w for w in wordlist if w not in stopwords and w.isdigit() == False and re.match(r'\W+',w) == None and re.match(r'\d+',w) == None]
+
+def parseFile(FILES):
+	unigram = {'neg': {}, 'pos': {}}
+	for first_file in FILES:
+		if re.match(r'.*/neg/.*',first_file) is not None:
+			text = getFileContent(first_file)
+			text_without_pun = text.translate(string.maketrans("",""),string.punctuation)			
+			word_list = text_without_pun.strip().lower().split()
+			word_list = removeStopwords(word_list, stopWords)
+			for wd in word_list:
+				count = unigram['neg'].get(wd, 0) + 1
+				unigram['neg'][wd] = count
+		else:
+			text = getFileContent(first_file)
+			text_without_pun = text.translate(string.maketrans("",""),string.punctuation)
+			word_list = text_without_pun.lower().split()
+			word_list = removeStopwords(word_list, stopWords)
+			for wd in word_list:
+				count = unigram['pos'].get(wd, 0) + 1
+				unigram['pos'][wd] = count
+	return unigram
+
+def getTotalCounts(unigram):
+	count_neg = float(sum(unigram['neg'].values()))
+	count_pos = float(sum(unigram['pos'].values()))
+	print "Total count of negative words: ", count_neg
+	print "Total count of positive words: ", count_pos
+	tot_counts = [count_neg,count_pos]
+	return tot_counts
+
+def writeOutput(unigram):
+	tot_counts = getTotalCounts(unigram)
+	out = []
+	for key1 in unigram:
+		for key2 in unigram[key1]:
+			if key1 == 'neg':
+				line = [key1 ,key2 ,str(unigram[key1][key2]),unigram[key1][key2]/tot_counts[0]]
+			else:
+				line = [key1 ,key2 ,str(unigram[key1][key2]),unigram[key1][key2]/tot_counts[1]]
+			out.append(line)
+
+	out.sort(key=lambda x: x[1])
+
+	outfile_name = "movie_unigram.csv"
+	output_file = open(outfile_name, 'wa')
+	output_file.write('class,word,count,probability\n')
+	for ele in out:
+		row = ele[0] + ',' + ele[1] + ',' + ele[2] + ',' + str(ele[3]) +'\n'
+		output_file.write(row)
+	output_file.close()
+
+def main():
+	args = parseArgument()
+	directory = args['d'][0]
+	print directory
+	FILES = getFileList(directory)
+	unigram = parseFile(FILES)
+	writeOutput(unigram)
+
+
+if __name__ == '__main__':
+	main()
+
+
