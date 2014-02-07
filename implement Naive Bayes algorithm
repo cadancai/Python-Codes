@@ -1,0 +1,192 @@
+#!/usr/bin/python
+__author__ = 'Lee Cai'
+
+#implementation of Naive Bayes Algorithm
+
+import argparse
+import re
+import os
+import random
+import nltk
+from nltk.corpus import stopwords
+from nltk.stem.wordnet import WordNetLemmatizer
+#import pickle
+import math
+from datetime import datetime
+
+def parseArgument():
+    parser = argparse.ArgumentParser(description='Parsing a file.')
+    parser.add_argument('-d', nargs=1, required=True)
+    args = vars(parser.parse_args())
+    return args
+
+def getFileList(direc):
+    FILES = {'neg':[],'pos':[]}
+    for r,d,f in os.walk(direc):
+        for file in f:
+            if file.endswith(".txt") and r.endswith("neg"):
+                fle = os.path.join(r,file)
+                FILES['neg'].append(fle)
+            elif file.endswith(".txt") and r.endswith("pos"):
+                fle = os.path.join(r,file)
+                FILES['pos'].append(fle)
+    return FILES
+
+def getFileContent(filename):
+    input_file = open(filename,'r')
+    text = input_file.read()
+    input_file.close()
+    return text
+
+def getTrainTestFiles(FILES):
+    train_neg_numfiles = int(round(2*len(FILES['neg'])/3.0))
+    train_pos_numfiles = int(round(2*len(FILES['pos'])/3.0))
+    trainTestFiles = {}
+    trainTestFiles['train_neg_files'] = random.sample(FILES['neg'], train_neg_numfiles)
+    trainTestFiles['test_neg_files'] = [fle for fle in FILES['neg'] if fle not in trainTestFiles['train_neg_files']]
+    trainTestFiles['train_pos_files'] = random.sample(FILES['pos'], train_pos_numfiles)
+    trainTestFiles['test_pos_files'] = [fle for fle in FILES['pos'] if fle not in trainTestFiles['train_pos_files']]
+    return trainTestFiles
+
+# this function contains the major improvements I have made in the algorithm
+# that is to implement the lemmatization, however, because of that, it takes a much longer time to run my code
+def TokenizeLemmanizeText(text):
+    # split the texts into tokens
+    tokens = nltk.word_tokenize(text)
+    # normalized the tokens
+    tokens = [token.lower() for token in tokens if len(token) > 1]
+    # filter out stop words, numbers, any words that contain numbers
+    tokens1 = [w for w in tokens if not w in stopwords.words('english') and re.match(r'\W+',w) == None and re.match(r'\d+',w) == None]
+    # use the WordNet Lemmatizer to lemmatize the tokens
+    lmtzr = WordNetLemmatizer()
+    wordnet_tag ={'NN':'n','JJ':'a','VB':'v','RB':'r'}
+    # the nltk.pos_tag function return the tag of the word to identify verb, noun, adjective etc.
+    tagged = nltk.pos_tag(tokens1)
+    tokens_lem = []
+    for t in tagged:
+        try:
+            if wordnet_tag[t[1][:2]] != 'n':
+                # feed the tag back to the lemmatizer
+                tokens_lem.append(lmtzr.lemmatize(t[0],wordnet_tag[t[1][:2]]))
+            else:
+                tokens_lem.append(lmtzr.lemmatize(t[0]))
+        except:
+            tokens_lem.append(lmtzr.lemmatize(t[0]))
+    return tokens_lem
+
+def parseFile(trainTestFiles):
+    unigram = {'neg': {}, 'pos': {}}
+    for fle in trainTestFiles['train_neg_files']:
+        text = getFileContent(fle)
+        tokens_lem = TokenizeLemmanizeText(text)
+        for wd in tokens_lem:
+            count = unigram['neg'].get(wd, 0) + 1
+            unigram['neg'][wd] = count
+    for fle in trainTestFiles['train_pos_files']:
+        text = getFileContent(fle)
+        tokens_lem = TokenizeLemmanizeText(text)
+        for wd in tokens_lem:
+            count = unigram['pos'].get(wd, 0) + 1
+            unigram['pos'][wd] = count
+    # unigram is a nested dictionary contain all the frequencies of each word from neg and pos classes respectively.
+    return unigram
+
+def getTotalCounts(unigram):
+    #get the total counts of words in each class, neg and pos.
+    count_neg = float(sum(unigram['neg'].values()))
+    count_pos = float(sum(unigram['pos'].values()))
+    # V is the cardinal of the vocabulary, the number of unique words
+    V = len(set(unigram['neg'].keys() + unigram['pos'].keys()))
+    tot_counts = [count_neg,count_pos,V]
+    return tot_counts
+
+def calculateProbs(unigram,tot_counts):
+    # This function calculate the conditional probabilities for each word in the neg and pos classes.
+    # the formula is (p(wi,c) + 1)/(p(c)+V)
+    out = {'neg': {}, 'pos': {}}
+    for key1 in unigram:
+        for key2 in unigram[key1]:
+            if key1 == 'neg':
+                out[key1][key2] = (unigram[key1][key2]+1)/(tot_counts[0]+tot_counts[2])
+            else:
+                out[key1][key2] = (unigram[key1][key2]+1)/(tot_counts[1]+tot_counts[2])
+    return out
+
+###the pickle dump and load are used during programming to save time. Keep them here in case later needed.
+#pickle.dump(unigram, open("unigram.p", "wb"))
+#pickle.dump(out,open("out.p","wb"))
+#pickle.dump(trainTestFiles,open("trainTestFiles.p","wb"))
+#unigram = pickle.load(open("unigram.p", "rb"))
+#out = pickle.load(open("out.p","rb"))
+#trainTestFiles = pickle.load(open("trainTestFiles.p","rb"))
+
+def classifyDocument(file,tot_counts,pclass,out):
+    # provide the file name in string (file), the total number of words in neg and pos,  and V (tot_counts)
+    # the p(neg) and p(pos) (pclass), the nested dictionary contains the conditional probabilities (out)
+    text = getFileContent(file)
+    tokens_lem = TokenizeLemmanizeText(text)
+    freq_count = [(item, tokens_lem.count(item)) for item in set(sorted(tokens_lem))]
+    cl_out = {}
+    for cl in ['neg','pos']:  # this for loop block implements the naive-bayes formula
+        log_prob = math.log(pclass[cl])
+        for wd,cnt in freq_count:
+            if out[cl].has_key(wd):
+                log_prob += (cnt*math.log(out[cl][wd]))
+            else:
+                pwd = (1/(tot_counts[0]+tot_counts[2]+1.0))
+                log_prob += (cnt*math.log(pwd))
+        cl_out[cl] = log_prob  # a dictionary contains the two log probabilities for each class, neg and pos
+    # return the class with larger log probability
+    if cl_out['neg'] >= cl_out['pos']:
+        return 'neg'
+    else:
+        return 'pos'
+
+def getAccuracy(trainTestFiles,tot_counts,pclass,out):
+    # the parameters are similar to function classifyDocument.
+    # loop through the set of pos and neg test files and return the accuracy percentages
+    num_neg_correct_docs = 0
+    for fle in trainTestFiles['test_neg_files']:
+        if classifyDocument(fle,tot_counts,pclass,out) == 'neg':
+            num_neg_correct_docs += 1
+    print "number of negative test files: ", len(trainTestFiles['test_neg_files'])
+    print "number of negative training files: ", len(trainTestFiles['train_neg_files'])
+    print "number of correct classification in negative documents: ", num_neg_correct_docs
+    num_pos_correct_docs = 0
+    for fle in trainTestFiles['test_pos_files']:
+        if classifyDocument(fle,tot_counts,pclass,out) == 'pos':
+            num_pos_correct_docs += 1
+    print "number of positive test files: ", len(trainTestFiles['test_pos_files'])
+    print "number of positive training files: ", len(trainTestFiles['train_pos_files'])
+    print "number of correct classification in positive documents: ", num_pos_correct_docs
+    accuracy = (num_pos_correct_docs + num_neg_correct_docs) / float(len(trainTestFiles['test_pos_files']) + len(trainTestFiles['test_neg_files']))
+    print "classification accuracy: ", accuracy
+    return accuracy
+
+def main():
+    print "Running this code takes about 45 mins on a macbook pro with 16G RAM. So please be patient!"
+    current_time = datetime.now().strftime('%I:%M:%S%p')
+    crt_time = datetime.now()
+    print current_time
+    args = parseArgument()
+    directory = args['d'][0]
+    FILES = getFileList(directory)
+    accuracy = 0
+    for i in range(1,4):
+        print "iteration %d:" % i
+        trainTestFiles = getTrainTestFiles(FILES)
+        unigram = parseFile(trainTestFiles)
+        tot_counts = getTotalCounts(unigram)
+        out = calculateProbs(unigram,tot_counts)
+        Prb_neg = len(trainTestFiles['train_neg_files'])/float((len(trainTestFiles['train_neg_files'])+len(trainTestFiles['train_pos_files'])))
+        Prb_pos = 1 - Prb_neg
+        pclass = {"neg": Prb_neg, "pos": Prb_pos}
+        accuracy += getAccuracy(trainTestFiles,tot_counts,pclass,out)
+    print "average accuracy: ", round(accuracy/3.0 * 100,2), "percentage"
+    end_time = datetime.now().strftime('%I:%M:%S%p')
+    ed_time = datetime.now()
+    print end_time
+    print "time used:", ed_time - crt_time
+
+if __name__ == "__main__":
+    main()
