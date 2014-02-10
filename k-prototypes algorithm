@@ -5,6 +5,7 @@ __author__ = 'Lee Cai'
 #CLUSTERING LARGE DATA SETS WITH MIXED NUMERIC AND CATEGORICAL VALUES
 #It's used to handle mixed data in clustering analysis
 
+import scipy
 import random
 import numpy as np
 from collections import Counter
@@ -37,14 +38,32 @@ def Sigma(x1,x2):
 def HighestFreq(x,Clustership,cluster,attr):
 	return Counter(x[Clustership == cluster,attr]).most_common(1)[0][0]
 
+def initialize_prototypes(X,numericAttr,catAttr,K,gamma=1):
+	C = [X[0]]
+	for k in range(1,K):
+		D2 = scipy.array([min([Distance(x[numericAttr],c[numericAttr]) + gamma*Sigma(x[catAttr],c[catAttr]) for c in C]) for x in X], dtype=float)
+		probs = D2/D2.sum()
+		cumprobs = probs.cumsum()
+		r = scipy.rand()
+		i = -1
+		for j,p in enumerate(cumprobs):
+			if r < p:
+				i = j
+				break
+		C.append(X[i])
+	return C
+
 #x is a numpy array contains all the data
 #NumberOfClusters is the number of clusters chosen
 #numericAttr is a list contains the column index of numeric attributes
 #catAttr is a list contains the column index of categorical attributes
 #maxIter is the maximum iterations that is allowed
 #gamma is the weight for all the categorical attributes, default to 1
-def k_prototypes(x,NumberOfClusters,numericAttr,catAttr,maxIter=100,gamma=1):
-	prototypes = np.asarray(random.sample(x, NumberOfClusters)) #Choose the initial prototypes
+def k_prototypes(x,NumberOfClusters,numericAttr,catAttr,maxIter=100,gamma=1,rand=0):
+	if rand == 0:
+		prototypes = np.asarray(random.sample(x, NumberOfClusters)) #Choose the initial prototypes
+	else:
+		prototypes = np.asarray(initialize_prototypes(x,numericAttr,catAttr,NumberOfClusters,gamma))
 	print 'prototypes:','\n', prototypes
 	#break out the numeric and categorical parts
 	x_num = x[:,numericAttr]
@@ -112,7 +131,7 @@ def k_prototypes(x,NumberOfClusters,numericAttr,catAttr,maxIter=100,gamma=1):
 				'SumInCluster': SumInCluster, 'ClusterCount': ClusterCount , 'NumberOfClusters': NumberOfClusters}
 
 #example calling of the function.
-k_prototypes(x,3,[0,1],[2],maxIter=10,gamma=1)
+k_prototypes(x,3,[0,1],[2],maxIter=10,gamma=1,rand=1)
 
 
 
