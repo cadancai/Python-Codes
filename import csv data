@@ -13,3 +13,10 @@ def read_csv(csv_file):
   		if i > 0:
   			data.append(row)
   return data
+
+def printTopRows(dt,nrows):
+	num = 0
+	for row in dt:
+		if num < nrows:
+			print row
+			num += 1
