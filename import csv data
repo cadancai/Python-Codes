@@ -1,0 +1,15 @@
+#This is a little function I would like to keep as a reference
+#for how to read in csv format data
+
+import csv
+
+def read_csv(csv_file):
+  data = []
+  with open(csv_file) as csvfile:
+  	spamreader = csv.reader(csvfile, delimiter=',', quotechar='|')
+  	for i,row in enumerate(spamreader):
+  		if i == 0:
+  			col_names = row
+  		if i > 0:
+  			data.append(row)
+  return data
